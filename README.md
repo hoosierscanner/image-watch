@@ -83,6 +83,23 @@ labels:
   image-watch.flag_prs: '{"123": "a change to read about before updating"}'
 ```
 
+### How it finds what changed
+
+It watches **containers**, not repositories. For each one:
+
+1. **Image and tag** come from what the container runs (say `robotastic/trunk-recorder-pro:edge`);
+   that tag is what it checks the registry for.
+2. **The repository** comes from the image's `org.opencontainers.image.source` label
+   (`https://github.com/TrunkRecorder/trunk-recorder-pro`), unless you set `github` yourself.
+3. **The commits** are the ones between the running image's and the new image's
+   `org.opencontainers.image.revision` labels, the exact commit each was built from.
+
+If an image has no such labels and you haven't set `github`, you still get the notice that a
+new build exists, without the commit list or the summary. Only GitHub repositories are supported
+for commits; images can come from any registry that speaks the standard v2 API.
+
+### Options
+
 Per container:
 
 - `github`: the repository to take commits from, when the image doesn't say (its source label).
