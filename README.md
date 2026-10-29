@@ -12,15 +12,28 @@ Every hour, for each watched container, it:
    two builds from GitHub, has an AI summarize them, and posts one Discord message with the
    summary, a link to the full comparison, and any warnings you asked for.
 
+A notice looks like this:
+
+> **New edge for trunk-pro** (links to the GitHub comparison)
+>
+> * EDACS support has been added, including configuration and decoding of EDACS systems.
+> * The bladeRF radio is now supported as a native source.
+> * Live gain adjustments are now possible for RTL-SDR, Airspy, and USRP/SoapySDR radios.
+> * …
+>
+> **Running** `525e9f1e1e61` · **New** `d9b324e2dd1e` · **Commits** 188
+> *robotastic/trunk-recorder-pro:edge · summary by cloudflare @cf/meta/llama-3.3-70b-instruct-fp8-fast*
+
 The commits come from the images' standard OCI labels (`org.opencontainers.image.source` and
 `org.opencontainers.image.revision`), which most images built with GitHub Actions carry.
 
 ## Install
 
-Needs Docker with Compose. Then:
+Needs Linux (or anything running Docker Engine) with Docker Compose v2, and a Discord channel
+you can add a webhook to. Then:
 
 ```sh
-git clone <this repo> image-watch
+git clone https://github.com/hoosierscanner/image-watch.git
 cd image-watch
 ./install.sh
 ```
@@ -102,3 +115,15 @@ docker compose run --rm image-watch python3 /app/watch.py --test    # test messa
 | `install.sh` | interactive setup |
 | `docker-compose.yml`, `Dockerfile` | the containers; the `claude-code` build adds the Claude Code CLI |
 | `watch.json.example` | the watch list's format |
+| `LICENSE` | MIT |
+
+## Why not Watchtower?
+
+Watchtower's repository was archived in December 2025, and its default Docker API version is
+older than Docker 29 accepts. It also needs full access to the Docker socket to do its job of
+pulling and restarting. image-watch only has to look, so it gets a read-only view, and leaves
+updating to you.
+
+## License
+
+[MIT](LICENSE)
