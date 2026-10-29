@@ -1,0 +1,9 @@
+{
+  "containers": {
+    "my-container": {},
+    "another-container": {
+      "github": "owner/repo",
+      "flag_prs": {"123": "a change to read about before updating"}
+    }
+  }
+}

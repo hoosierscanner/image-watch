@@ -1,0 +1,6 @@
+# Local settings and secrets: made by install.sh, never committed
+.env
+secrets/
+state/
+watch.json
+__pycache__/

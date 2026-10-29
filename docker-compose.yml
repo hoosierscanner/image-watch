@@ -1,0 +1,59 @@
+# image-watch: a Discord message when a watched container's image has a new
+# build (Watchtower-style, notify only: nothing is pulled or restarted).
+#
+# Set up or change settings with ./install.sh (Discord, GitHub, AI provider).
+# Watch a container by listing it in watch.json, or with the label
+# image-watch.enable=true on that container. Secrets, one per file, in
+# ./secrets: discord-webhook, github-token (optional, raises GitHub's rate
+# limit), ai-key (the AI provider's key or token). The provider is in .env.
+#
+#   docker compose up -d --build
+#   docker compose run --rm image-watch python3 /app/watch.py --test
+#   docker compose run --rm image-watch python3 /app/watch.py --once
+
+services:
+  image-watch:
+    build:
+      context: .
+      target: ${AI_TARGET:-base}
+    image: local/image-watch:${AI_TARGET:-base}
+    container_name: image-watch
+    restart: unless-stopped
+    init: true
+    read_only: true
+    user: "1000:1000"
+    networks: [default, docker-api]
+    depends_on: [socket-proxy]
+    tmpfs: [/tmp]
+    environment:
+      INTERVAL: "3600"
+      AI_PROVIDER: ${AI_PROVIDER:-none}
+      AI_MODEL: ${AI_MODEL:-}
+      CF_ACCOUNT_ID: ${CF_ACCOUNT_ID:-}
+    volumes:
+      - ./watch.py:/app/watch.py:ro
+      - ./watch.json:/config/watch.json:ro
+      - ./secrets:/secrets:ro
+      - ./state:/state
+    command: ["python3", "-u", "/app/watch.py"]
+    logging:
+      options: {max-size: 1m, max-file: "2"}
+
+  # Read-only window onto Docker: listing containers and images, nothing else.
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy:v0.5.0
+    container_name: image-watch-socket-proxy
+    restart: unless-stopped
+    networks: [docker-api]
+    environment:
+      CONTAINERS: "1"
+      IMAGES: "1"
+      POST: "0"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    logging:
+      options: {max-size: 1m, max-file: "2"}
+
+networks:
+  docker-api:
+    internal: true
