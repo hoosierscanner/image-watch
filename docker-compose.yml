@@ -35,6 +35,7 @@ services:
       - ./watch.json:/config/watch.json:ro
       - ./secrets:/secrets:ro
       - ./state:/state
+      - /etc/localtime:/etc/localtime:ro   # log times in the host's time zone
     command: ["python3", "-u", "/app/watch.py"]
     logging:
       options: {max-size: 1m, max-file: "2"}
