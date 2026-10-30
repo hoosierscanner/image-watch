@@ -12,8 +12,12 @@ Every INTERVAL seconds, for each watched container:
 
 A container is watched when it has the label image-watch.enable=true or is
 listed in watch.json. Per container (labels "image-watch.<key>" or keys in
-watch.json): github (owner/repo, default: the image's source label) and
-flag_prs ({"104": "call store"}: say so when one of those PRs is in the update).
+watch.json): github (owner/repo, default: the image's source label),
+flag_prs ({"104": "call store"}: say so when one of those PRs is in the update),
+and releases (true: for a container pinned to an exact version tag, also
+check GitHub's latest release against that tag -- the digest check above
+only catches a new build of the SAME tag, never a new version under a
+different one).
 
   python3 watch.py           run forever
   python3 watch.py --once    check once and exit
@@ -122,6 +126,14 @@ def github(path):
     return json.loads(body) if status == 200 else None
 
 
+def semver(tag):
+    """'v1.9.1' -> (1, 9, 1); None if tag doesn't start with a version number."""
+    m = re.match(r"^[vV]?(\d+)(?:\.(\d+))?(?:\.(\d+))?", tag)
+    if not m:
+        return None
+    return tuple(int(g) if g else 0 for g in m.groups())
+
+
 def changes(repo, old, new):
     """Commits old..new as (sha, headline), newest last, and the compare URL."""
     c = github("/repos/%s/compare/%s...%s" % (repo, old, new)) if old and new else None
@@ -215,19 +227,20 @@ def watched():
             continue
         if isinstance(opts.get("flag_prs"), str):
             opts["flag_prs"] = json.loads(opts["flag_prs"])
+        if isinstance(opts.get("releases"), str):
+            opts["releases"] = opts["releases"].lower() == "true"
         out[name] = (c, opts)
     return out
 
 
-def check_one(name, c, opts, state):
+def check_one(name, c, opts, state, img):
     ref = c["Image"] if not c["Image"].startswith("sha256:") else None
-    img = docker("/images/%s/json" % c["ImageID"])
     ref = ref or (img.get("RepoTags") or [None])[0]
     registry, repo, tag = parse_ref(ref)
     running = next((d.split("@")[1] for d in img.get("RepoDigests", []) if d.split("@")[0].endswith(repo.split("library/")[-1])), None)
     reg = Registry(registry, repo)
     latest = reg.digest(tag)
-    if latest == running or state.get(name) == latest:
+    if latest == running or state.get(name, {}).get("digest") == latest:
         return False
     old_labels = img.get("Config", {}).get("Labels") or {}
     new_labels = reg.labels(latest)
@@ -254,8 +267,45 @@ def check_one(name, c, opts, state):
     if compare:
         embed["url"] = compare
     if discord(embed):
-        state[name] = latest
+        state.setdefault(name, {})["digest"] = latest
         log(name, "announced", latest[:19], len(commits), "commits", flags)
+        return True
+    return False
+
+
+def check_release(name, img, opts, state):
+    """For a container pinned to an exact version tag: is GitHub's latest release newer?"""
+    ref = (img.get("RepoTags") or [None])[0]
+    if not ref:
+        return False
+    _, _, tag = parse_ref(ref)
+    labels = img.get("Config", {}).get("Labels") or {}
+    src = opts.get("github") or re.sub(r"^https://github.com/", "", labels.get("org.opencontainers.image.source", ""))
+    if not src:
+        return False
+    rel = github("/repos/%s/releases/latest" % src)
+    new_tag = rel.get("tag_name") if rel else None
+    if not new_tag:
+        return False
+    cur_v, new_v = semver(tag), semver(new_tag)
+    if (new_v <= cur_v) if (cur_v is not None and new_v is not None) else (tag == new_tag):
+        return False
+    if state.get(name, {}).get("release") == new_tag:
+        return False
+    shas_commits, compare = changes(src, tag, new_tag)
+    commits = [m for _, m in shas_commits]
+    summary = summarize(ref, commits)
+    desc = (summary or "\n".join("• " + x for x in commits[-15:]) or "No commit list available.")[:3500]
+    fields = [{"name": "Running", "value": "`%s`" % tag, "inline": True},
+              {"name": "New release", "value": "`%s`" % new_tag, "inline": True},
+              {"name": "Commits", "value": str(len(commits)), "inline": True}]
+    embed = {"title": "New release %s for %s" % (new_tag, name), "description": desc, "fields": fields,
+             "color": 0x8E44AD,
+             "footer": {"text": ref + (" · summary by %s %s" % (AI, MODEL) if summary else "")}}
+    embed["url"] = compare or rel.get("html_url")
+    if discord(embed):
+        state.setdefault(name, {})["release"] = new_tag
+        log(name, "new release", new_tag, len(commits), "commits")
         return True
     return False
 
@@ -267,7 +317,11 @@ def run_once():
         state = {}
     for name, (c, opts) in watched().items():
         try:
-            if check_one(name, c, opts, state):
+            img = docker("/images/%s/json" % c["ImageID"])
+            announced = check_one(name, c, opts, state, img)
+            if opts.get("releases") and check_release(name, img, opts, state):
+                announced = True
+            if announced:
                 with open(STATE + ".tmp", "w") as f:
                     json.dump(state, f, indent=1)
                 os.replace(STATE + ".tmp", STATE)

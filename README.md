@@ -98,6 +98,24 @@ If an image has no such labels and you haven't set `github`, you still get the n
 new build exists, without the commit list or the summary. Only GitHub repositories are supported
 for commits; images can come from any registry that speaks the standard v2 API.
 
+### Pinned to a version tag? Set `releases: true`
+
+The digest check above only ever asks the registry about the tag you're already running. If
+that tag is a version like `v1.9.1`, a new release ships under a *different* tag (`v1.9.2`) that
+the digest check never queries — so you'd see silence forever, not "no updates available". This
+is invisible with a floating tag like `edge` or `latest`, where every new build lands under the
+same tag you're watching.
+
+Set `"releases": true` on a container pinned to an exact version tag, and image-watch also asks
+GitHub for that repository's latest release and compares version numbers. When it's newer, you
+get a notice in the same style (commits, AI summary, compare link) titled "New release". This is
+independent of the digest check, so you may occasionally get both for the same cycle — that's
+two different, both-true facts (a new build of your tag, and a newer tag exists), not a
+duplicate.
+
+Don't set it on a container tracking a floating tag: there's no version number to compare, so
+image-watch falls back to "any different tag is new", which is noisy and not the point.
+
 ### Options
 
 Per container:
@@ -105,6 +123,8 @@ Per container:
 - `github`: the repository to take commits from, when the image doesn't say (its source label).
 - `flag_prs`: pull requests to watch for. When an update contains one of them (merged), the
   message turns orange and says so. Handy for a big change you want to prepare for.
+- `releases`: also check GitHub's latest release against the running version tag (see above).
+  Only makes sense for a container pinned to an exact version, not a floating tag.
 
 ## Commands
 
