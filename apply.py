@@ -62,6 +62,9 @@ def apply_item(item, ask, run=run_cmd, digests=pulled_digests, state=container_s
             restore(rw, backup)
         return "failed: pull exit %d" % rc
     ref = image_name(item.ref, item.tag) + ":" + (item.new_tag or item.tag)
+    if item.kind is None and digest_matches(digests(ref), item.expected):
+        p(item.name + ": already up to date, nothing to recreate")
+        return "up to date"
     if not digest_matches(digests(ref), item.expected):
         p("pulled %s, but you approved %s (a newer build landed since)" % (
             ", ".join(short(d.split("@")[-1]) for d in digests(ref)) or "nothing", short(item.expected)))

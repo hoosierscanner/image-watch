@@ -67,12 +67,12 @@ class Flow(unittest.TestCase):
         self.assertEqual(self.calls, []); self.assertEqual(open(self.f).read(), COMPOSE)
         self.assertEqual(os.listdir(self.d.name), ["docker-compose.yml"])
 
-    def test_forced_digest_pull(self):
+    def test_forced_pull_with_same_digest_is_up_to_date(self):
         i = Item(name="image-watch-socket-proxy", service="socket-proxy", workdir=self.d.name, config_files=[self.f],
                  ref="tecnativa/docker-socket-proxy:v0.5.0", tag="v0.5.0", running="sha256:aaa", latest="sha256:aaa",
                  expected="sha256:aaa", selected=True)
         r = self.go(i, ["y"], digests=("tecnativa/docker-socket-proxy@sha256:aaa",))
-        self.assertEqual(r, "updated"); self.assertEqual(self.calls, ["socket-proxy", "up"])
+        self.assertEqual(r, "up to date"); self.assertEqual(self.calls, ["socket-proxy"])
         self.assertEqual(open(self.f).read(), COMPOSE)
 
     def test_run_selected_quit_skips_rest(self):
