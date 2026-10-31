@@ -81,6 +81,10 @@ class Commands(unittest.TestCase):
         self.assertEqual(ac.compose_cmd(i, "pull", "socket-proxy"),
                          ["docker", "compose", "-f", "/a/docker-compose.yml", "-f", "/a/override.yml", "pull", "socket-proxy"])
 
+    def test_compose_cmd_pins_project(self):
+        i = Item(name="x", service="s", project="custom", workdir="/a", config_files=["/a/c.yml"])
+        self.assertEqual(ac.compose_cmd(i, "up"), ["docker", "compose", "-p", "custom", "-f", "/a/c.yml", "up"])
+
     def test_digest_matches(self):
         ds = ["prom/node-exporter@sha256:aaa", "docker.io/prom/node-exporter@sha256:bbb"]
         self.assertTrue(ac.digest_matches(ds, "sha256:bbb"))

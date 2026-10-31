@@ -28,6 +28,10 @@ class Model(unittest.TestCase):
         self.assertEqual([i.name for i in cl.chosen()], ["node-exporter", "trunk-pro"])
         cl.clear(); self.assertEqual(cl.chosen(), [])
 
+    def test_empty_list_is_safe(self):
+        cl = Checklist([]); cl.toggle(); cl.select_pending(); cl.move(1); cl.clear()
+        self.assertEqual(cl.chosen(), [])
+
     def test_keys(self):
         cl = Checklist(rows())
         self.assertIsNone(cl.handle_key(curses.KEY_DOWN)); self.assertEqual(cl.cursor, 1)

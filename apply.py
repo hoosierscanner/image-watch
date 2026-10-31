@@ -36,6 +36,14 @@ def describe(item, rw):
 
 def apply_item(item, ask, run=run_cmd, digests=pulled_digests, state=container_state, dry_run=False):
     p = print
+    raw_ask = ask
+
+    def ask(prompt):
+        try:
+            return raw_ask(prompt)
+        except EOFError:  # no input left: the default answer is No
+            return ""
+
     rw = None
     if item.kind == "release":
         try:
@@ -55,19 +63,21 @@ def apply_item(item, ask, run=run_cmd, digests=pulled_digests, state=container_s
     if dry_run:
         for argv in (pull, up):
             p("would run (in %s): %s" % (item.workdir, " ".join(argv)))
-        return "updated"
+        return "would update"
     rc = run(pull, item.workdir)
     if rc:
         if rw:
             restore(rw, backup)
         return "failed: pull exit %d" % rc
     ref = image_name(item.ref, item.tag) + ":" + (item.new_tag or item.tag)
-    if item.kind is None and digest_matches(digests(ref), item.expected):
+    pulled = digests(ref)
+    matches = digest_matches(pulled, item.expected)
+    if item.kind is None and matches:
         p(item.name + ": already up to date, nothing to recreate")
         return "up to date"
-    if not digest_matches(digests(ref), item.expected):
+    if not matches:
         p("pulled %s, but you approved %s (a newer build landed since)" % (
-            ", ".join(short(d.split("@")[-1]) for d in digests(ref)) or "nothing", short(item.expected)))
+            ", ".join(short(d.split("@")[-1]) for d in pulled) or "nothing", short(item.expected)))
         if ask("Recreate anyway? [y/N] ").strip().lower() != "y":
             if rw:
                 restore(rw, backup)

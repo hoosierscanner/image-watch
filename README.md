@@ -2,7 +2,8 @@
 
 A Discord message when a container you run has a new image build, with a short
 AI summary of what changed. Like [Watchtower](https://github.com/containrrr/watchtower)
-in monitor-only mode, but it never pulls or restarts anything: you decide when to update.
+in monitor-only mode: the watcher never pulls or restarts anything. When you decide to update,
+run `./apply.py` on the host (see [Applying updates](#applying-updates)): a checklist, one y/N per container.
 
 Every hour, for each watched container, it:
 

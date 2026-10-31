@@ -63,7 +63,7 @@ class Flow(unittest.TestCase):
         self.assertTrue(self.go(self.release_item(), []).startswith("skipped: no line"))
 
     def test_dry_run_changes_nothing(self):
-        self.assertEqual(self.go(self.release_item(), ["y"], dry_run=True), "updated")
+        self.assertEqual(self.go(self.release_item(), ["y"], dry_run=True), "would update")
         self.assertEqual(self.calls, []); self.assertEqual(open(self.f).read(), COMPOSE)
         self.assertEqual(os.listdir(self.d.name), ["docker-compose.yml"])
 
@@ -81,6 +81,22 @@ class Flow(unittest.TestCase):
         res = apply.run_selected([a, b], lambda p: answers.pop(0), run=self.run_,
                                  digests=lambda r: [], state=lambda n: "")
         self.assertEqual(res, [("node-exporter", "quit"), ("second", "skipped")])
+
+    def test_eof_on_prompt_means_no(self):
+        def eof(prompt): raise EOFError
+        self.rc = []
+        r = apply.apply_item(self.release_item(), ask=eof, run=self.run_, digests=lambda ref: [], state=lambda n: "")
+        self.assertEqual(r, "skipped"); self.assertEqual(open(self.f).read(), COMPOSE)
+
+    def test_eof_on_second_prompt_restores_compose(self):
+        answers = ["y"]
+        def ask(prompt):
+            if answers: return answers.pop(0)
+            raise EOFError
+        self.rc = [0]
+        r = apply.apply_item(self.release_item(), ask=ask, run=self.run_,
+                             digests=lambda ref: ["prom/node-exporter@sha256:eee"], state=lambda n: "")
+        self.assertEqual(r, "skipped: digest changed"); self.assertEqual(open(self.f).read(), COMPOSE)
 
     def test_run_selected_empty(self):
         self.assertEqual(apply.run_selected([], lambda p: self.fail("asked")), [])

@@ -14,6 +14,8 @@ class Checklist:
         self.cursor = max(0, min(len(self.items) - 1, self.cursor + delta))
 
     def toggle(self):
+        if not self.items:
+            return
         item = self.items[self.cursor]
         if item.error is None:
             item.selected = not item.selected

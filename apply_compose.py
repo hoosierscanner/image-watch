@@ -66,7 +66,7 @@ def restore(rw, backup):
 
 
 def compose_cmd(item, *args):
-    argv = ["docker", "compose"]
+    argv = ["docker", "compose"] + (["-p", item.project] if item.project else [])
     for f in item.config_files:
         argv += ["-f", f]
     return argv + list(args)
