@@ -134,6 +134,14 @@ def semver(tag):
     return tuple(int(g) if g else 0 for g in m.groups())
 
 
+def is_newer(cur_tag, new_tag):
+    """True when new_tag is a newer release than cur_tag (versions compared as numbers, other tags by inequality)."""
+    cur_v, new_v = semver(cur_tag), semver(new_tag)
+    if cur_v is not None and new_v is not None:
+        return new_v > cur_v
+    return new_tag != cur_tag
+
+
 def changes(repo, old, new):
     """Commits old..new as (sha, headline), newest last, and the compare URL."""
     c = github("/repos/%s/compare/%s...%s" % (repo, old, new)) if old and new else None
@@ -212,6 +220,19 @@ def discord(embed):
 
 # ---- the check
 
+def image_ref(c, img):
+    ref = c["Image"] if not c["Image"].startswith("sha256:") else None
+    return ref or (img.get("RepoTags") or [None])[0]
+
+
+def running_digest(img, repo):
+    return next((d.split("@")[1] for d in img.get("RepoDigests", []) if d.split("@")[0].endswith(repo.split("library/")[-1])), None)
+
+
+def source_repo(opts, labels):
+    return opts.get("github") or re.sub(r"^https://github.com/", "", labels.get("org.opencontainers.image.source", ""))
+
+
 def watched():
     try:
         conf = json.load(open(CONFIG))
@@ -234,17 +255,16 @@ def watched():
 
 
 def check_one(name, c, opts, state, img):
-    ref = c["Image"] if not c["Image"].startswith("sha256:") else None
-    ref = ref or (img.get("RepoTags") or [None])[0]
+    ref = image_ref(c, img)
     registry, repo, tag = parse_ref(ref)
-    running = next((d.split("@")[1] for d in img.get("RepoDigests", []) if d.split("@")[0].endswith(repo.split("library/")[-1])), None)
+    running = running_digest(img, repo)
     reg = Registry(registry, repo)
     latest = reg.digest(tag)
     if latest == running or state.get(name, {}).get("digest") == latest:
         return False
     old_labels = img.get("Config", {}).get("Labels") or {}
     new_labels = reg.labels(latest)
-    src = opts.get("github") or re.sub(r"^https://github.com/", "", new_labels.get("org.opencontainers.image.source", ""))
+    src = source_repo(opts, new_labels)
     old_rev, new_rev = old_labels.get("org.opencontainers.image.revision"), new_labels.get("org.opencontainers.image.revision")
     shas_commits, compare = changes(src, old_rev, new_rev) if src else ([], None)
     shas, commits = {s for s, _ in shas_commits}, [m for _, m in shas_commits]
@@ -267,7 +287,10 @@ def check_one(name, c, opts, state, img):
     if compare:
         embed["url"] = compare
     if discord(embed):
-        state.setdefault(name, {})["digest"] = latest
+        st = state.setdefault(name, {})
+        st["digest"] = latest
+        st["digest_notice"] = {"digest": latest, "summary": desc, "flags": flags, "url": compare,
+                               "at": time.strftime("%Y-%m-%d %H:%M")}
         log(name, "announced", latest[:19], len(commits), "commits", flags)
         return True
     return False
@@ -280,15 +303,14 @@ def check_release(name, img, opts, state):
         return False
     _, _, tag = parse_ref(ref)
     labels = img.get("Config", {}).get("Labels") or {}
-    src = opts.get("github") or re.sub(r"^https://github.com/", "", labels.get("org.opencontainers.image.source", ""))
+    src = source_repo(opts, labels)
     if not src:
         return False
     rel = github("/repos/%s/releases/latest" % src)
     new_tag = rel.get("tag_name") if rel else None
     if not new_tag:
         return False
-    cur_v, new_v = semver(tag), semver(new_tag)
-    if (new_v <= cur_v) if (cur_v is not None and new_v is not None) else (tag == new_tag):
+    if not is_newer(tag, new_tag):
         return False
     if state.get(name, {}).get("release") == new_tag:
         return False
@@ -304,7 +326,10 @@ def check_release(name, img, opts, state):
              "footer": {"text": ref + (" · summary by %s %s" % (AI, MODEL) if summary else "")}}
     embed["url"] = compare or rel.get("html_url")
     if discord(embed):
-        state.setdefault(name, {})["release"] = new_tag
+        st = state.setdefault(name, {})
+        st["release"] = new_tag
+        st["release_notice"] = {"tag": new_tag, "summary": desc, "url": embed["url"],
+                                "at": time.strftime("%Y-%m-%d %H:%M")}
         log(name, "new release", new_tag, len(commits), "commits")
         return True
     return False
