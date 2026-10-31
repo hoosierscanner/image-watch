@@ -4,3 +4,4 @@ secrets/
 state/
 watch.json
 __pycache__/
+*.bak-*

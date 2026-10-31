@@ -136,6 +136,30 @@ docker compose run --rm image-watch python3 /app/watch.py --test    # test messa
 
 `INTERVAL` in `docker-compose.yml` sets how often it checks (seconds, default 3600).
 
+## Applying updates
+
+`./apply.py` pulls and recreates the containers that have an update. It runs on the host, not in
+the container. It needs Python 3 and membership in the `docker` group.
+
+```sh
+./apply.py              # checklist, then y/N for each container you ticked
+./apply.py --list       # just print the status table
+./apply.py --dry-run    # go through the prompts, show what would run, change nothing
+./apply.py --only NAME  # skip the checklist for one or more containers (comma-separated)
+```
+
+The checklist shows every watched container with its live status. Keys: arrows (or `j`/`k`) move,
+space ticks, `a` ticks everything pending, `n` clears, Enter continues, `q` quits. Updates that
+were already announced come pre-ticked. Ones marked "not announced" don't, because there is no
+summary yet and the PR flags haven't been checked. The panel below the list shows the summary
+and any PR warnings for the highlighted row.
+
+Each ticked container gets its own y/N prompt, and the default is No. For a new release, apply.py
+first rewrites the image tag in the compose file and keeps a `.bak-<time>` copy next to it. Then it
+runs `docker compose pull` and `up -d --no-deps` for that service only. The pull is checked against
+the digest you approved: if a newer build landed in between, it asks again before recreating.
+If the pull fails, the compose file is put back.
+
 ## Security
 
 - Docker is reached only through [docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy),
@@ -143,12 +167,16 @@ docker compose run --rm image-watch python3 /app/watch.py --test    # test messa
   exec). The proxy sits on an internal network that only image-watch can reach.
 - image-watch runs as a normal user with a read-only filesystem; it writes only `state/`.
 - `.env`, `secrets/`, `state/` and `watch.json` are in `.gitignore`.
+- `apply.py` is the only part that changes anything. It runs on the host with your own Docker access, only
+  when you start it, and acts only on containers you confirm one by one. The container side stays read-only.
 
 ## Files
 
 | File | What |
 |---|---|
 | `watch.py` | the watcher (Python standard library, plus the Anthropic SDK for the Claude API) |
+| `apply.py`, `apply_status.py`, `apply_compose.py`, `apply_ui.py` | the update tool (runs on the host) |
+| `tests/` | `python3 -m unittest discover -s tests` |
 | `install.sh` | interactive setup |
 | `docker-compose.yml`, `Dockerfile` | the containers; the `claude-code` build adds the Claude Code CLI |
 | `watch.json.example` | the watch list's format |
