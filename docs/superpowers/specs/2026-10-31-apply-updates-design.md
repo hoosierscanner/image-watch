@@ -129,6 +129,9 @@ At the end: a summary of updated, skipped and failed items. Exit 0 unless one fa
 ./apply.py --list      print the status table and exit (no prompts, no changes)
 ./apply.py --dry-run   full interactive flow, but print the file write and docker
                        commands instead of running them
+./apply.py --only a,b  skip the checklist and select these containers (they must be
+                       selectable); the per-container y/N prompts still run. Works with
+                       piped stdin, so the flow can be tested without a terminal.
 ```
 
 ## Error handling
@@ -137,6 +140,9 @@ At the end: a summary of updated, skipped and failed items. Exit 0 unless one fa
 |---|---|
 | Registry or GitHub call fails for a container | Row shows `check failed: <msg>`, unselectable; other rows unaffected. |
 | No compose labels | Row shows `not a compose container`, unselectable. |
+| Running image has no registry digest (built locally) | Row shows `running image has no registry digest`, unselectable. |
+| New release on GitHub but its tag isn't in the registry yet | Row shows `check failed: registry …: 404` for the new tag, unselectable, until the image is pushed. |
+| `state.json` missing or unreadable | Treated as empty: nothing counts as announced. |
 | Tag rewrite can't find exactly one line | That item is skipped with the reason; no file touched. |
 | Pull fails | Restore backup (release), report, continue with next item. |
 | Digest mismatch after pull | Ask; on no, restore backup and skip. |
